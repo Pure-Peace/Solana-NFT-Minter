@@ -1,0 +1,13 @@
+{
+    "excludeFlag": "11111111",
+    "excludes": [
+        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+        "cndyAnrLdpjq1Ssp1z8xxDsB8dxe7u4HL5Nxi2K5WXZ",
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "InvalidAddressBecauseDestinationIsAlsoSource",
+        "NotEnoughBalanceBecauseDestinationNotCreated",
+        "UnavailableTezosOriginatedAccountReceive",
+        "HvwC9QSAzvGXhhVrgPmauVwFWcYZhne3hVot9EbHuFTm"
+    ]
+}
