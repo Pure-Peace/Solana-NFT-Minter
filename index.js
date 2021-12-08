@@ -1,13 +1,9 @@
-const {
-  readyMint,
-  mintOne,
-  readyAll,
-} = require('./utils')
+const { cmd } = require('./utils')
 
-const config = require('./config')
-
-async function main() {
-  await mintOne(await readyAll(config))
-}
-
-main().then()
+;(async () => {
+  await cmd.handleCli()
+})()
+  .then(() => cmd.exitProcess())
+  .catch((err) => {
+    console.error(err)
+  })

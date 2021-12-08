@@ -1,6 +1,9 @@
 {
-    "excludeFlag": "11111111",
-    "excludes": [
+    "SOLANA_ACCOUNTS_DIR": "./solana-accounts",
+    "CANDY_MACHINE_SAVE_DIR": "./candy-machine",
+    "MINT_SITE_TMP_DIR": "./mint-site-tmp",
+    "EXCLUDE_FLAG": "11111111",
+    "EXCLUDES": [
         "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
         "cndyAnrLdpjq1Ssp1z8xxDsB8dxe7u4HL5Nxi2K5WXZ",
         "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -9,5 +12,8 @@
         "NotEnoughBalanceBecauseDestinationNotCreated",
         "UnavailableTezosOriginatedAccountReceive",
         "HvwC9QSAzvGXhhVrgPmauVwFWcYZhne3hVot9EbHuFTm"
-    ]
+    ],
+    "DEFAULT_BATCH_GET_CANDY_MACHINE_FILE": "./batch.json",
+    "DEFAULT_BATCH_MINT_DIR": "./batch-mint",
+    "DEFAULT_NFT_MINT_COUNT": 1
 }

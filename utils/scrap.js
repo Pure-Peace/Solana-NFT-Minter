@@ -1,19 +1,25 @@
 const fs = require('fs')
 const path = require('path')
-
 const scrape = require('website-scraper')
-const prompts = require('prompts')
 
-const { urlToDir, rmDir, listDir } = require('./common')
-const utils = require('./solana')
-const { excludeFlag, excludes } = require('../scrapConfig.json')
+const common = require('./common')
+const solana = require('./solana')
+
+const {
+  MINT_SITE_TMP_DIR,
+  CANDY_MACHINE_SAVE_DIR,
+  EXCLUDE_FLAG,
+  EXCLUDES,
+} = require('../nft-minter-config.json')
+
+const CANDY_REGEX = /(?<=")([A-Za-z0-9]{40,50})?(?=")/g
 
 /**
  * @param {string} url
  * @param {string} directory
  **/
 async function downloadWebsite(url, directory) {
-  if (fs.existsSync(directory)) rmDir(directory)
+  if (fs.existsSync(directory)) common.rmDir(directory)
   return await scrape({
     urls: [url],
     directory,
@@ -33,13 +39,12 @@ async function downloadWebsite(url, directory) {
  **/
 function getLikeKeys(files) {
   const likeKeys = []
-  const REGEX = /(?<=")([A-Za-z0-9]{40,50})?(?=")/g
   files.forEach((i) => {
-    const f = fs.readFileSync(i).toString().match(REGEX)
+    const f = fs.readFileSync(i).toString().match(CANDY_REGEX)
     f &&
       likeKeys.push(
         ...f.filter(
-          (v) => !!v && !excludes.includes(v) && !v.includes(excludeFlag),
+          (v) => !!v && !EXCLUDES.includes(v) && !v.includes(EXCLUDE_FLAG),
         ),
       )
   })
@@ -50,92 +55,65 @@ function getLikeKeys(files) {
  * @param {string} url
  **/
 const getLikeKeysFromSite = async (url) => {
-  const websiteDir = urlToDir(url)
-  const tmpDir = path.join('./tmp/', websiteDir)
+  const websiteDir = common.urlToDir(url)
+  const tmpDir = path.join(MINT_SITE_TMP_DIR, websiteDir)
   await downloadWebsite(url, tmpDir)
-  const { files } = listDir(tmpDir)
+  const { files } = common.listDir(tmpDir)
   return getLikeKeys(files)
 }
 
 /**
- * @param {web3.Cluster} cluster
  * @param {string} url
+ * @param {solana.ReuseableOptions} options
  **/
-const getCandyFromSite = async (cluster, url) => {
-  return await utils.tryGetRealCandyKeys(
-    cluster,
-    await getLikeKeysFromSite(url),
-  )
+const getCandyFromSite = async (url, options) => {
+  console.log(`\n  >> Downloading mint site ("${url}") resources...`)
+  const likeKeys = await getLikeKeysFromSite(url)
+  console.log(`  >> Found ${likeKeys.length} data that may be candy machines.`)
+  console.log('  >> Confirming candy machine with Solana...')
+  return await solana.tryGetRealCandyKeys(likeKeys, options)
 }
 
-const scrapCandy = async () => {
-  const { url } = await prompts(
-    {
-      type: 'text',
-      name: 'url',
-      message: 'Please enter solana NFT project mint site url:',
-      validate: (value) =>
-        !value.includes('http://') && !value.includes('https://')
-          ? `Please enter a valid url`
-          : true,
-    },
-    {
-      onCancel: () => {
-        process.exit(1)
-      },
-    },
-  )
-  const { cluster } = await prompts(
-    {
-      type: 'select',
-      name: 'cluster',
-      message: 'Select solana cluster type:',
-      choices: [
-        {
-          title: 'mainnet-beta',
-          value: 'mainnet-beta',
-        },
-        { title: 'testnet', value: 'testnet' },
-        { title: 'devnet', value: 'devnet' },
-      ],
-      initial: 0,
-    },
-    {
-      onCancel: () => {
-        process.exit(1)
-      },
-    },
-  )
-  console.log('⚽ Getting CandyMachine...')
+/**
+ * @param {string} url
+ * @param {solana.ReuseableOptions} options
+ **/
+const scrapCandy = async (url, options) => {
   try {
-    const candy = await getCandyFromSite(cluster, url)
+    console.log('\n ⚽ Getting CandyMachine:')
+    const data = await getCandyFromSite(url, options)
     console.log(
-      `✔️ Candy machine has been obtained!\n - MintSite: ${url}\n - CandyMachine: ${candy}`,
+      `\n✔️ Candy machine has been obtained!\n\n >> 📜 Mint site: ${url}\n >> 🎁 Candy machine: ${data.tryCandyData.key}\n >> ✨ View on Explorer: https://explorer.solana.com/address/${data.tryCandyData.key}?cluster=${options.cluster}\n`,
     )
-    return { candy, url, cluster }
+    return { data }
   } catch (err) {
     console.error(`❌ Fail to get Candy machine from site: ${url}`)
-    console.error('ERROR: ', err)
-    return { candy: '', url, cluster }
+    console.error('== ERROR: ', err)
+    return { err }
   }
 }
 
-const scrapCandyAndSave = async () => {
-  const { candy, url, cluster } = await scrapCandy()
-  if (!candy) throw new Error(`Failed to get CandyMachine from site: ${url}`)
+/**
+ * @param {string} url
+ * @param {solana.ReuseableOptions} options
+ **/
+const scrapCandyAndSave = async (url, options) => {
+  const { data, err } = await scrapCandy(url, options)
+  if (err) return { err }
 
-  const file = `${urlToDir(url)}.json`
-  const dir = './candyMachine'
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir)
-  fs.writeFileSync(
-    `${dir}/${file}`,
-    JSON.stringify({
-      CANDY_MACHINE_PROGRAM_UUID: candy.slice(0, 6),
-      CANDY_MACHINE_PROGRAM_CONFIG: candy,
-      CONNECTION_NETWORK: cluster,
-    }),
-  )
-  console.log(`✔️ CandyMachine config file saved at "${dir}/${file}" !`)
+  const file = `${common.urlToDir(url)}.json`
+  if (!fs.existsSync(CANDY_MACHINE_SAVE_DIR))
+    fs.mkdirSync(CANDY_MACHINE_SAVE_DIR)
+
+  const fullPath = path.join(CANDY_MACHINE_SAVE_DIR, file)
+  data.candyConfig = {
+    CANDY_MACHINE_PROGRAM_UUID: data.tryCandyData.key.slice(0, 6),
+    CANDY_MACHINE_PROGRAM_CONFIG: data.tryCandyData.key,
+    CONNECTION_NETWORK: options.cluster,
+  }
+  fs.writeFileSync(fullPath, JSON.stringify(data.candyConfig))
+  console.log(`✔️ Candy machine config file saved at "${fullPath}" !`)
+  return { data, url, fullPath }
 }
 
 module.exports = {
@@ -145,4 +123,5 @@ module.exports = {
   getCandyFromSite,
   scrapCandy,
   scrapCandyAndSave,
+  CANDY_REGEX,
 }
