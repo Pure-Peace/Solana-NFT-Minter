@@ -22,10 +22,10 @@ const exitProcess = () => {
 }
 
 /**
- * @param {boolean} exitOnCancel
+ * @param {boolean?} doneExitOnCancel
  * @returns {Promise<string>}
  **/
-const selectCluster = async (exitOnCancel) => {
+const selectCluster = async (doneExitOnCancel) => {
   const { cluster } = await prompts(
     {
       type: 'select',
@@ -37,17 +37,17 @@ const selectCluster = async (exitOnCancel) => {
       initial: 0,
     },
     {
-      onCancel: exitOnCancel && exitProcess,
+      onCancel: !doneExitOnCancel && exitProcess,
     },
   )
   return cluster
 }
 
 /**
- * @param {boolean} exitOnCancel
+ * @param {boolean?} doneExitOnCancel
  * @returns {Promise<string>}
  **/
-const inputUrl = async (exitOnCancel) => {
+const inputUrl = async (doneExitOnCancel) => {
   const { url } = await prompts(
     {
       type: 'text',
@@ -59,17 +59,17 @@ const inputUrl = async (exitOnCancel) => {
           : true,
     },
     {
-      onCancel: exitOnCancel && exitProcess,
+      onCancel: !doneExitOnCancel && exitProcess,
     },
   )
   return url
 }
 
 /**
- * @param {boolean} exitOnCancel
  * @param {string?} defaultPath
+ * @param {boolean?} doneExitOnCancel
  **/
-const jsonFromFile = async (exitOnCancel, defaultPath) => {
+const jsonFromFile = async (defaultPath, doneExitOnCancel) => {
   const { file } = await prompts(
     {
       type: 'text',
@@ -78,38 +78,38 @@ const jsonFromFile = async (exitOnCancel, defaultPath) => {
       initial: defaultPath,
     },
     {
-      onCancel: exitOnCancel && exitProcess,
+      onCancel: !doneExitOnCancel && exitProcess,
     },
   )
   return readJsonToObject(file)
 }
 
 /**
- * @param {boolean} exitOnCancel
  * @param {number?} defaultCount
+ * @param {boolean?} doneExitOnCancel
  * @returns {Promise<number>}
  **/
-const inputMintCount = async (exitOnCancel, defaultCount = 1) => {
+const inputMintCount = async (defaultCount, doneExitOnCancel) => {
   const { count } = await prompts(
     {
       type: 'number',
       name: 'count',
       message: 'Please enter NFT mint count:',
-      initial: defaultCount,
+      initial: defaultCount || 1,
       min: 1,
     },
     {
-      onCancel: exitOnCancel && exitProcess,
+      onCancel: !doneExitOnCancel && exitProcess,
     },
   )
   return count
 }
 
 /**
- * @param {boolean} exitOnCancel
+ * @param {boolean?} doneExitOnCancel
  * @returns {Promise<Uint8Array>}
  **/
-const selectPrivKey = async (exitOnCancel) => {
+const selectPrivKey = async (doneExitOnCancel) => {
   const { privKey } = await prompts(
     {
       type: 'select',
@@ -124,7 +124,7 @@ const selectPrivKey = async (exitOnCancel) => {
       initial: 0,
     },
     {
-      onCancel: exitOnCancel && exitProcess,
+      onCancel: !doneExitOnCancel && exitProcess,
     },
   )
   return privKey
@@ -135,8 +135,8 @@ const selectPrivKey = async (exitOnCancel) => {
  **/
 const cmdReuseInitializer = async (options) => {
   if (!options) {
-    const cluster = await selectCluster(true)
-    const privKey = await selectPrivKey(true)
+    const cluster = await selectCluster()
+    const privKey = await selectPrivKey()
     options = { cluster, privKey }
   }
   return await solana.reuseInitializer(options)
@@ -152,8 +152,8 @@ const cliGetCandyMachine = async (handle, shouldMintingLater, options) => {
 
   const urls =
     handle === 0
-      ? [await inputUrl(true)]
-      : await jsonFromFile(true, DEFAULT_BATCH_GET_CANDY_MACHINE_FILE)
+      ? [await inputUrl()]
+      : await jsonFromFile(DEFAULT_BATCH_GET_CANDY_MACHINE_FILE)
   console.log(` ✔️ We have got ${urls.length} mint site`)
   options = await cmdReuseInitializer(options)
 
@@ -222,6 +222,7 @@ const handleCliGetCandyMachine = async (options) => {
       `🌈 Mint: Get ${mintResults.length} results, Success: ${
         mintResults.filter((v) => v.success).length
       }, Error: ${mintResults.filter((v) => !v.success).length}!`,
+      results,
     )
   return { scarpResults, mintResults }
 }
@@ -319,6 +320,7 @@ const handleCliMintingNFT = async (options) => {
     `🌈 Mint: Get ${results.length} results, Success: ${
       results.filter((v) => v.success).length
     }, Error: ${results.filter((v) => !v.success).length}!`,
+    results,
   )
   return results
 }
@@ -338,7 +340,7 @@ const cliMintingNFT = async (candyMachineKeys, options) => {
         )
         const result = await minter.mint(
           candyMachineKeys.MINT_COUNT ||
-            (await inputMintCount(true, DEFAULT_NFT_MINT_COUNT)),
+            (await inputMintCount(DEFAULT_NFT_MINT_COUNT)),
         )
         return { minter, result }
       }),
@@ -369,6 +371,43 @@ const handleCli = async () => {
   return await cliHandles[handle]()
 }
 
+/**
+ * @param {boolean?} doneExitOnCancel
+ **/
+const inputSolanaPrice = async (doneExitOnCancel) => {
+  const { price } = await prompts(
+    {
+      type: 'number',
+      name: 'price',
+      message: 'Please enter NFT mint price:',
+      initial: 1,
+    },
+    {
+      onCancel: !doneExitOnCancel && exitProcess,
+    },
+  )
+  return solana.parsePrice(price)
+}
+
+/**
+ * @param {boolean?} doneExitOnCancel
+ **/
+const inputNFTsAvailable = async (doneExitOnCancel) => {
+  const { count } = await prompts(
+    {
+      type: 'number',
+      name: 'count',
+      message: 'Please enter count of NFT items available:',
+      initial: 1,
+      min: 0,
+    },
+    {
+      onCancel: !doneExitOnCancel && exitProcess,
+    },
+  )
+  return count
+}
+
 module.exports = {
   exitProcess,
   inputUrl,
@@ -377,4 +416,6 @@ module.exports = {
   handleCliGetCandyMachine,
   handleCliMintingNFT,
   handleCli,
+  inputSolanaPrice,
+  inputNFTsAvailable,
 }

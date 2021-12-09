@@ -41,6 +41,20 @@ const { readJsonToObject } = require('./common')
  *   CONNECTION_NETWORK: string,
  * }
  * }} GetRealCandyKeysResult
+ *
+ * @typedef {{
+ *  maxNumberOfLines: anchor.BN;
+ *  symbol: string;
+ *  sellerFeeBasisPoints: number;
+ *  isMutable: boolean;
+ *  maxSupply: anchor.BN;
+ *  retainAuthority: boolean;
+ *  creators: {
+ *    address: PublicKey;
+ *    verified: boolean;
+ *    share: number;
+ *  }[];
+ * }} ConfigData
  **/
 
 const CANDY_MACHINE = 'candy_machine'
@@ -53,6 +67,27 @@ const CANDY_MACHINE_PROGRAM_ID = new web3.PublicKey(
 const TOKEN_METADATA_PROGRAM_ID = new web3.PublicKey(
   'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s',
 )
+
+const CONFIG_ARRAY_START =
+  32 + // authority
+  4 +
+  6 + // uuid + u32 len
+  4 +
+  10 + // u32 len + symbol
+  2 + // seller fee basis points
+  1 +
+  4 +
+  5 * 34 + // optional + u32 len + actual vec
+  8 + //max supply
+  1 + //is mutable
+  1 + // retain authority
+  4 // max number of lines;
+const CONFIG_LINE_SIZE = 4 + 32 + 4 + 200
+
+/**
+ * There are 1-billion lamports in one SOL
+ */
+const LAMPORTS_PER_SOL = 1000000000
 
 /**
  * @param {web3.PublicKey} wallet
@@ -204,7 +239,7 @@ const createProvider = async (connection, privKey) => {
 /**
  * @param {anchor.Provider} provider
  **/
-const createAnchorProgram = async (provider) => {
+const createCandyAnchorProgram = async (provider) => {
   const idl = await anchor.Program.fetchIdl(CANDY_MACHINE_PROGRAM_ID, provider)
   return new anchor.Program(idl, CANDY_MACHINE_PROGRAM_ID, provider)
 }
@@ -255,7 +290,7 @@ const readyAll = async ({
 }) => {
   const connection = createConnection(CONNECTION_NETWORK)
   const { wallet, provider } = await createProvider(connection, PRIV_KEY)
-  const anchorProgram = await createAnchorProgram(provider)
+  const anchorProgram = await createCandyAnchorProgram(provider)
   const candyData = await readyCandy(
     anchorProgram,
     CANDY_MACHINE_PROGRAM_CONFIG,
@@ -381,7 +416,7 @@ const reuseInitializer = async (options) => {
       wallet = providerData.wallet
       provider = providerData.provider
     }
-    anchorProgram = await createAnchorProgram(provider)
+    anchorProgram = await createCandyAnchorProgram(provider)
     return Object.assign(options, { anchorProgram, payer, wallet, provider })
   } else {
     return options
@@ -403,6 +438,115 @@ const tryGetRealCandyKeys = async (likeKeys, options) => {
   }
 }
 
+/**
+ * @param {web3.PublicKey} pubKey
+ **/
+function uuidFromPubkey(pubKey) {
+  return pubKey.toBase58().slice(0, 6)
+}
+
+/**
+ * @param {anchor.Program} anchorProgram
+ * @param {ConfigData} configData
+ * @param {web3.PublicKey} payerWallet
+ * @param {web3.PublicKey} configAccount
+ **/
+async function createCandyConfigAccount(
+  anchorProgram,
+  configData,
+  payerWallet,
+  configAccount,
+) {
+  const size =
+    CONFIG_ARRAY_START +
+    4 +
+    configData.maxNumberOfLines.toNumber() * CONFIG_LINE_SIZE +
+    4 +
+    Math.ceil(configData.maxNumberOfLines.toNumber() / 8)
+
+  return anchor.web3.SystemProgram.createAccount({
+    fromPubkey: payerWallet,
+    newAccountPubkey: configAccount,
+    space: size,
+    lamports: await anchorProgram.provider.connection.getMinimumBalanceForRentExemption(
+      size,
+    ),
+    programId: CANDY_MACHINE_PROGRAM_ID,
+  })
+}
+
+/**
+ * @param {anchor.Program} anchorProgram
+ * @param {web3.Keypair} payerWallet
+ * @param {ConfigData} configData
+ **/
+const createCandyConfig = async function (
+  anchorProgram,
+  payerWallet,
+  configData,
+) {
+  const configAccount = web3.Keypair.generate()
+  const uuid = uuidFromPubkey(configAccount.publicKey)
+
+  if (!configData.creators || configData.creators.length === 0) {
+    throw new Error(`Invalid config, there must be at least one creator.`)
+  }
+
+  const totalShare = (configData.creators || []).reduce(
+    (acc, curr) => acc + curr.share,
+    0,
+  )
+
+  if (totalShare !== 100) {
+    throw new Error(`Invalid config, creators shares must add up to 100`)
+  }
+
+  return {
+    config: configAccount.publicKey,
+    uuid,
+    txId: await anchorProgram.rpc.initializeConfig(
+      {
+        uuid,
+        ...configData,
+      },
+      {
+        accounts: {
+          config: configAccount.publicKey,
+          authority: payerWallet.publicKey,
+          payer: payerWallet.publicKey,
+          systemProgram: web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+        signers: [payerWallet, configAccount],
+        instructions: [
+          await createCandyConfigAccount(
+            anchorProgram,
+            configData,
+            payerWallet.publicKey,
+            configAccount.publicKey,
+          ),
+        ],
+      },
+    ),
+  }
+}
+
+/**
+ * @param {string} address
+ * @param {string} cluster
+ **/
+const explorerUrl = (address, cluster) => {
+  return `https://explorer.solana.com/address/${address}?cluster=${cluster}`
+}
+
+/**
+ * @param {number} price
+ * @param {number} mantissa
+ **/
+const parsePrice = (price, mantissa = LAMPORTS_PER_SOL) => {
+  return Math.ceil(parseFloat(price) * mantissa)
+}
+
 module.exports = {
   CANDY_MACHINE,
   SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
@@ -415,7 +559,7 @@ module.exports = {
   createAssociatedTokenAccountInstruction,
   createConnection,
   createProvider,
-  createAnchorProgram,
+  createCandyAnchorProgram,
   readyCandy,
   readyMint,
   mintOne,
@@ -424,4 +568,10 @@ module.exports = {
   tryCandyKey,
   tryGetRealCandyKeys,
   reuseInitializer,
+  uuidFromPubkey,
+  createCandyConfig,
+  createCandyConfigAccount,
+  explorerUrl,
+  parsePrice,
+  LAMPORTS_PER_SOL,
 }

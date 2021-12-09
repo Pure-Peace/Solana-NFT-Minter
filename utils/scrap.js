@@ -83,7 +83,12 @@ const scrapCandy = async (url, options) => {
     console.log('\n ⚽ Getting CandyMachine:')
     const data = await getCandyFromSite(url, options)
     console.log(
-      `\n✔️ Candy machine has been obtained!\n\n >> 📜 Mint site: ${url}\n >> 🎁 Candy machine: ${data.tryCandyData.key}\n >> ✨ View on Explorer: https://explorer.solana.com/address/${data.tryCandyData.key}?cluster=${options.cluster}\n`,
+      `\n✔️ Candy machine has been obtained!\n\n >> 📜 Mint site: ${url}\n >> 🎁 Candy machine: ${
+        data.tryCandyData.key
+      }\n >> ✨ View on Explorer: ${solana.explorerUrl(
+        data.tryCandyData.key,
+        options.cluster,
+      )}\n`,
     )
     return { data }
   } catch (err) {
