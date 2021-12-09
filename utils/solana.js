@@ -246,10 +246,9 @@ const readyMint = async (wallet) => {
 }
 
 /**
- * @param {{ CANDY_MACHINE_PROGRAM_UUID: string, CANDY_MACHINE_PROGRAM_CONFIG: string, CONNECTION_NETWORK: string, PRIV_KEY: Uint8Array }}
+ * @param {{ CANDY_MACHINE_PROGRAM_CONFIG: string, CONNECTION_NETWORK: string, PRIV_KEY: Uint8Array }}
  **/
 const readyAll = async ({
-  CANDY_MACHINE_PROGRAM_UUID,
   CANDY_MACHINE_PROGRAM_CONFIG,
   CONNECTION_NETWORK,
   PRIV_KEY,
