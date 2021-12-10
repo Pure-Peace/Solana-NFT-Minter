@@ -196,7 +196,7 @@ const initialCandyMachine = async (
 }
 
   ; (async () => {
-    /* const { config, assets, options } = await createCandyMachineConfig()
+    const { config, assets, options } = await createCandyMachineConfig()
     const { results } = await handleConfigureCandyMachine(config, {
       assets,
       options,
@@ -204,7 +204,7 @@ const initialCandyMachine = async (
     const initialTx = await initialCandyMachine(config, {
       NFTitemsAvailable: assets.jsonFiles.length,
       options,
-    }) */
+    })
     /* const initialTx = await initialCandyMachine('G5YP5uPChKB8E5syDJWJ5ffbb7zB3uhVuoeNRacW7kGm')
     console.log(initialTx) */
   })().then(() => process.exit(0))

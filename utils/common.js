@@ -76,6 +76,10 @@ function dateFormat(fmt, date) {
   return fmt
 }
 
+function sleep(time) {
+  return new Promise((resolve) => setTimeout(() => resolve(), time))
+}
+
 /**
  * @param {number} price
  * @param {number} mantissa
@@ -92,4 +96,5 @@ module.exports = {
   saveJsonFromObject,
   parsePrice,
   dateFormat,
+  sleep,
 }

@@ -2,6 +2,7 @@ const {
   readJsonToObject,
   dateFormat,
   saveJsonFromObject,
+  sleep,
 } = require('./utils/common')
 const scrap = require('./utils/scrap')
 const solana = require('./utils/solana')
@@ -39,6 +40,10 @@ var LOGS_DATE
 var LOGS_DATE_TEXT
 /** @type {boolean} **/
 var stopping = false
+/** @type {number || undefined} **/
+var _balanceCheck
+/** @type {boolean} **/
+var endFlag = false
 
 function parseConfig() {
   configPath = path.join(process.argv[2])
@@ -94,8 +99,15 @@ function stopProcess(code) {
 }
 
 function check() {
+  config.candyMachine = config.candyMachine.trim()
+  config.mintUrl = config.mintUrl.trim()
+
   if (!config.candyMachine && !config.mintUrl) {
     throw new Error('[Require candy machine or mint site url]')
+  }
+
+  if (config.mintUrl.includes(' ') || config.candyMachine.includes(' ')) {
+    throw new Error('[mintUrl and candyMachine should not have spaces]')
   }
 
   if (!config.cluster) {
@@ -168,32 +180,76 @@ async function ready() {
   return { anchorProgram, wallet, provider }
 }
 
+async function checkBalance(connection, publicKey) {
+  const balance =
+    (await connection.getBalance(publicKey)) / solana.LAMPORTS_PER_SOL
+  log.info(`CURRENT BALANCE: ${balance} sol`)
+  if (balance < 1) {
+    endFlag = true
+    log.info('Insufficient balance (< 1), will end.')
+  }
+  return balance
+}
+
+async function balanceChecker(connection, publicKey) {
+  if (_balanceCheck) return
+  await checkBalance(connection, publicKey)
+  _balanceCheck = setInterval(async () => {
+    await checkBalance(connection, publicKey)
+  }, 5000)
+}
+
 async function minting(candyData, readyData) {
-  const { wallet, provider } = readyData
-  const results = (
-    await Promise.allSettled(
-      [...Array(config.mintCount).keys()].map(async (i) => {
-        try {
-          log.info(`Mint #${i}...`)
-          const tx = await solana.mintOne({
-            anchorProgram,
-            wallet,
-            provider,
-            candyData,
-          })
-          log.tx(tx)
-          return { index: i, status: true, tx }
-        } catch (err) {
-          log.err(`[MINT] #${i}: ${err}`)
-          return { index: i, status: false, tx: null }
-        }
-      }),
+  const { wallet, provider, anchorProgram } = readyData
+  let results = []
+  const task = async (i) => {
+    if (endFlag) {
+      log.info(`Stopping, skip task #${i}!`)
+      return { index: i, success: false, tx: null }
+    }
+    try {
+      log.info(`Mint #${i}...`)
+      const tx = await solana.mintOne({
+        anchorProgram,
+        wallet,
+        provider,
+        candyData,
+      })
+      log.tx(tx)
+      return { index: i, success: true, tx }
+    } catch (err) {
+      log.err(`[MINT] #${i}: ${err}`)
+      return { index: i, success: false, tx: null }
+    }
+  }
+
+  if (config.mintCount >= 0) {
+    log.info(`Minting count: ${config.mintCount}`)
+    balanceChecker(readyData.provider.connection, readyData.wallet.publicKey)
+    results = new Array(
+      (
+        await Promise.allSettled(
+          [...new Array(config.mintCount).keys()].map(task),
+        )
+      ).map((p) => p.value),
     )
-  ).map((p) => p.value)
+  } else {
+    log.info(`!!!!! Infinite mint !!!!!`)
+    let i = 0
+    balanceChecker(readyData.provider.connection, readyData.wallet.publicKey)
+    while (!endFlag) {
+      if (i % 10 === 0) await sleep(1000)
+      results.push(task(i))
+      i++
+    }
+  }
 
   log.info('Writing results...')
-  fs.writeFileSync(path.join(LOGS_DIR, 'result.json'), JSON.stringify(results))
-  log.info('Done!')
+  fs.writeFileSync(
+    path.join(LOGS_DIR, `mint_result_${LOGS_DATE_TEXT}.json`),
+    JSON.stringify(results),
+  )
+  log.info('Done!==')
 }
 
 async function main() {
