@@ -1,8 +1,14 @@
 const web3 = require('@solana/web3.js')
 const splToken = require('@solana/spl-token')
 const anchor = require('@project-serum/anchor')
+const prompts = require('prompts')
+const fs = require('fs')
+const path = require('path')
 
 const { readJsonToObject } = require('./common')
+const {
+  SOLANA_ACCOUNTS_DIR
+} = require('../nft-minter-config.json')
 
 /**
  * @typedef  {{
@@ -395,9 +401,57 @@ const tryCandyKey = (anchorProgram, key) => {
 }
 
 /**
+ * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<Uint8Array>}
+ **/
+const selectPrivKey = async (doneExitOnCancel) => {
+  const { privKey } = await prompts(
+    {
+      type: 'select',
+      name: 'privKey',
+      message: 'Select an privKey file:',
+      choices: fs.readdirSync(SOLANA_ACCOUNTS_DIR).map((f) => {
+        return {
+          title: f,
+          value: new Uint8Array(readJsonToObject(path.join(SOLANA_ACCOUNTS_DIR, f))),
+        }
+      }),
+      initial: 0,
+    },
+    {
+      onCancel: !doneExitOnCancel && (() => process.exit(0)),
+    },
+  )
+  return privKey
+}
+
+/**
+ * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<string>}
+ **/
+const selectCluster = async (doneExitOnCancel) => {
+  const { cluster } = await prompts(
+    {
+      type: 'select',
+      name: 'cluster',
+      message: 'Select solana cluster type:',
+      choices: ['mainnet-beta', 'testnet', 'devnet'].map((v) => {
+        return { title: v, value: v }
+      }),
+      initial: 0,
+    },
+    {
+      onCancel: !doneExitOnCancel && (() => process.exit(0)),
+    },
+  )
+  return cluster
+}
+
+
+/**
  * @param {ReuseableOptions} options
  **/
-const reuseInitializer = async (options) => {
+const reuseInitializer = async (options = {}) => {
   if (!options.anchorProgram) {
     console.log('\n >> Initializing Solana program...\n')
     let {
@@ -409,15 +463,22 @@ const reuseInitializer = async (options) => {
       cluster,
       privKey,
     } = options
+    if (anchorProgram) return options
     if (!provider) {
-      if (!connection) connection = createConnection(cluster)
+      if (!connection) {
+        if (!cluster) cluster = await selectCluster()
+        connection = createConnection(cluster)
+      }
+      if (!privKey) {
+        privKey = await selectPrivKey()
+      }
       const providerData = await createProvider(connection, privKey)
       payer = providerData.payer
       wallet = providerData.wallet
       provider = providerData.provider
     }
     anchorProgram = await createCandyAnchorProgram(provider)
-    return Object.assign(options, { anchorProgram, payer, wallet, provider })
+    return { anchorProgram, payer, wallet, provider, privKey, connection, cluster }
   } else {
     return options
   }
@@ -539,13 +600,6 @@ const explorerUrl = (address, cluster) => {
   return `https://explorer.solana.com/address/${address}?cluster=${cluster}`
 }
 
-/**
- * @param {number} price
- * @param {number} mantissa
- **/
-const parsePrice = (price, mantissa = LAMPORTS_PER_SOL) => {
-  return Math.ceil(parseFloat(price) * mantissa)
-}
 
 module.exports = {
   CANDY_MACHINE,
@@ -572,6 +626,7 @@ module.exports = {
   createCandyConfig,
   createCandyConfigAccount,
   explorerUrl,
-  parsePrice,
+  selectCluster,
+  selectPrivKey,
   LAMPORTS_PER_SOL,
 }

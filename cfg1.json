@@ -1,0 +1,9 @@
+{
+    "name": "The NFT mint project",
+    "cluster": "devnet",
+    "candyMachine": "The candy machine config",
+    "mintUrl": "The mint site url",
+    "walletPrivKey": "./solana-accounts/1.json",
+    "mintCount": -1,
+    "saveData": "./"
+}

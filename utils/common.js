@@ -43,9 +43,19 @@ const readJsonToObject = (path) => {
   return JSON.parse(fs.readFileSync(path).toString())
 }
 
+/**
+ * @param {number} price
+ * @param {number} mantissa
+ **/
+const parsePrice = (price, mantissa) => {
+  return Math.ceil(parseFloat(price) * mantissa)
+}
+
+
 module.exports = {
   listDir,
   rmDir,
   urlToDir,
   readJsonToObject,
+  parsePrice
 }

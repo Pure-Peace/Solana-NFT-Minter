@@ -3,28 +3,34 @@ const cmd = require('./utils/cmd')
 const common = require('./utils/common')
 const web3 = require('@solana/web3.js')
 const anchor = require('@project-serum/anchor')
+const config = require('website-scraper/lib/config/defaults')
 
-const ASSETS_DIR = `D:/PurePeace/Desktop/generate/assets`
 const META_DATA_MUTABLE = true
 const RETAIN_AUTHORITY = true
 
 /**
  * @typedef {{ jsonFiles: Array<string>, pngFiles: Array<string> }} NFTsAssets
+ * @typedef {web3.publicKey || string} CandyMachineConfig
  **/
 
 /**
- * @param {anchor.Program<Idl>} anchorProgram
- * @param {web3.Keypair} payer
- * @param {NFTsAssets} assets
+ * @param {{ assets?: NFTsAssets, assetsDir?: string, options?: solana.ReuseableOptions }}
  **/
-const initCandyMachine = async (anchorProgram, payer, assets) => {
+const createCandyMachineConfig = async ({
+  assets,
+  assetsDir,
+  options,
+} = {}) => {
+  if (!assets) assets = await getNFTsAssetsFromDir(assetsDir)
+  options = await solana.reuseInitializer(options)
+
   const NFT_COUNT = assets.jsonFiles.length
   console.log(`${NFT_COUNT} NFTs Founded`)
 
   const manifest = common.readJsonToObject(assets.jsonFiles[0])
   const { uuid, config, txId } = await solana.createCandyConfig(
-    anchorProgram,
-    payer,
+    options.anchorProgram,
+    options.payer,
     {
       maxNumberOfLines: new anchor.BN(NFT_COUNT),
       symbol: manifest.symbol,
@@ -44,15 +50,17 @@ const initCandyMachine = async (anchorProgram, payer, assets) => {
   console.log(
     `🌈 Candy machine has been initialized successfully! \n >> PublicKey: ${config} \n >> UUID: ${uuid} \n >> TX: ${txId}`,
   )
-  return { uuid, config, txId }
+  return { uuid, config, txId, assets, options }
 }
 
 /**
- * @param {string} assertsDir
+ * @param {string} assetsDir
+ * @returns {Promise<NFTsAssets>}
  **/
-const getNFTsAssetsFromDir = (assertsDir) => {
+const getNFTsAssetsFromDir = async (assetsDir) => {
+  if (!assetsDir) assetsDir = await cmd.inputNFTsAssetsDir()
   const [jsonFiles, pngFiles] = ['.json', '.png'].map((i) =>
-    common.listDir(assertsDir).files.filter((f) => f.endsWith(i)),
+    common.listDir(assetsDir).files.filter((f) => f.endsWith(i)),
   )
   if (!jsonFiles) throw new Error('No NFT assets were founded')
   return { jsonFiles, pngFiles }
@@ -64,140 +72,139 @@ const getNFTsAssetsFromDir = (assertsDir) => {
  **/
 const readyHandleCandyMachine = async (cluster, privKey) => {
   const { payer, provider } = await solana.createProvider(
-    solana.createConnection(cluster || (await cmd.selectCluster())),
-    privKey || (await cmd.selectPrivKey()),
+    solana.createConnection(cluster || (await solana.selectCluster())),
+    privKey || (await solana.selectPrivKey()),
   )
   const anchorProgram = await solana.createCandyAnchorProgram(provider)
   return { anchorProgram, payer }
 }
 
+
 /**
- * @param {anchor.Program<Idl>} anchorProgram
- * @param {web3.Keypair} payer
- * @param {web3.PublicKey} candyMachineConfig
- * @param {NFTsAssets} assets
+ * @param {CandyMachineConfig} candyMachineConfig
+ **/
+const parseCandyMachineConfig = (candyMachineConfig) => {
+  if (typeof candyMachineConfig === 'string') return { config: new web3.PublicKey(candyMachineConfig), configString: candyMachineConfig }
+  else return { config: candyMachineConfig, configString: candyMachineConfig.toBase58() }
+}
+
+/**
+ * @param {CandyMachineConfig} candyMachineConfig
+ * @param {{ assets: NFTsAssets, assetsDir: string, options?: solana.ReuseableOptions }}
  **/
 const addCandiesToCandyMachine = async (
-  anchorProgram,
-  payer,
   candyMachineConfig,
-  assets,
+  { assets, assetsDir, options } = {},
 ) => {
-  const jsonFiles = Object.assign({}, assets.jsonFiles)
-  const promises = []
+  if (!assets) assets = await getNFTsAssetsFromDir(assetsDir)
+  options = await solana.reuseInitializer(options)
+
+  const jsonFiles = [...assets.jsonFiles]
+  const results = []
   for (let group = 0; jsonFiles.length > 0; group++) {
-    promises.push(
-      new Promise(async (resolve, reject) => {
-        const res = await anchorProgram.rpc.addConfigLines(
-          group,
-          jsonFiles.splice(0, 10).map((jsonFile) => {
+    const ind = group * 10
+    try {
+      console.log(`Add config lines: ${ind} ~ ${ind + 10}...`)
+      results.push(
+        await options.anchorProgram.rpc.addConfigLines(
+          ind,
+          jsonFiles.splice(0, 10).map((jsonFile, idx) => {
             const { name } = common.readJsonToObject(jsonFile)
             return {
-              uri: `https://osu.icu/nft/${promises.length + 1}.png`,
+              uri: `https://osu.icu/nft/${ind + idx}.json`,
               name,
             }
           }),
           {
             accounts: {
-              config: candyMachineConfig,
-              authority: payer.publicKey,
+              config: parseCandyMachineConfig(candyMachineConfig).configString,
+              authority: options.payer.publicKey,
             },
-            signers: [payer],
+            signers: [options.payer],
           },
         )
-        return resolve(res)
-      }),
-    )
+      )
+    } catch (err) {
+      console.log(`[ERR] Add config lines: ${ind} ~ ${ind + 10}: `, err)
+    }
   }
-  return await Promise.allSettled(promises)
+  console.log(results.length)
+  return { results, options }
 }
 
 /**
- * @param {string} candyMachineConfig
+ * @param {CandyMachineConfig} candyMachineConfig
+ * @param {{ assets?: NFTsAssets, assetsDir?: string, options?: solana.ReuseableOptions }}
  **/
-const handleConfigureCandyMachine = async (candyMachineConfig) => {
-  const assets = getNFTsAssetsFromDir(ASSETS_DIR)
-  const { anchorProgram, payer } = await readyHandleCandyMachine()
-  const result = await addCandiesToCandyMachine(
-    anchorProgram,
-    payer,
-    candyMachineConfig
-      ? new web3.PublicKey(candyMachineConfig)
-      : (await configureCandyMachine(anchorProgram, payer, assets)).config,
-    assets,
-  )
-  console.log('Done: ', assets.jsonFiles.length, result)
-}
-
-/**
- * @param {web3.PublicKey} candyMachineConfig
- * @param {number} parsedPrice
- * @param {number} NFTitemsAvailable
- **/
-const handleInitialCandyMachine = async (
+const handleConfigureCandyMachine = async (
   candyMachineConfig,
-  parsedPrice,
-  NFTitemsAvailable,
+  { assets, assetsDir, options } = {},
 ) => {
-  const { anchorProgram, payer } = await readyHandleCandyMachine()
-  return await initialCandyMachine(
-    anchorProgram,
-    payer,
-    candyMachineConfig,
-    parsedPrice,
-    NFTitemsAvailable,
+  if (!assets) assets = await getNFTsAssetsFromDir(assetsDir)
+  options = await solana.reuseInitializer(options)
+  const results = await addCandiesToCandyMachine(
+    new web3.PublicKey(candyMachineConfig),
+    { assets, options },
   )
+  return { results, options }
 }
 
+
 /**
- * @param {anchor.Program<Idl>} anchorProgram
- * @param {web3.Keypair} payer
- * @param {string} candyMachineConfig
- * @param {number} parsedPrice
- * @param {number} NFTitemsAvailable
+ * @param {CandyMachineConfig} candyMachineConfig
+ * @param {{ parsedPrice?:number, NFTitemsAvailable?:number, options?: solana.ReuseableOptions }}
  **/
 const initialCandyMachine = async (
-  anchorProgram,
-  payer,
   candyMachineConfig,
-  parsedPrice,
-  NFTitemsAvailable,
+  { parsedPrice, NFTitemsAvailable, options } = {},
 ) => {
-  const uuid = candyMachineConfig.slice(0, 6)
-  const config = new web3.PublicKey(candyMachineConfig)
+  options = await solana.reuseInitializer(options)
+
+  const parsedCandyMachineConfig = parseCandyMachineConfig(candyMachineConfig)
+  const uuid = parsedCandyMachineConfig.configString.slice(0, 6)
+  const { config } = parsedCandyMachineConfig
   const [candyMachine, bump] = await solana.getCandyMachine(config, uuid)
-  return await anchorProgram.rpc.initializeCandyMachine(
-    bump,
-    {
-      uuid,
-      price: new anchor.BN(parsedPrice || (await cmd.inputSolanaPrice())),
-      itemsAvailable: new anchor.BN(
-        NFTitemsAvailable || (await cmd.inputNFTsAvailable()),
-      ),
-      goLiveDate: null,
-    },
-    {
-      accounts: {
-        candyMachine,
-        wallet: payer.publicKey,
-        config,
-        authority: payer.publicKey,
-        payer: payer.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+  console.log('Initializing Candy machine...')
+  return {
+    result: await options.anchorProgram.rpc.initializeCandyMachine(
+      bump,
+      {
+        uuid,
+        price: new anchor.BN(parsedPrice || (await cmd.inputSolanaPrice())),
+        itemsAvailable: new anchor.BN(
+          NFTitemsAvailable || (await cmd.inputNFTsAvailable()),
+        ),
+        goLiveDate: null,
       },
-      signers: [],
-      remainingAccounts: [],
-    },
-  )
+      {
+        accounts: {
+          candyMachine,
+          wallet: options.payer.publicKey,
+          config,
+          authority: options.payer.publicKey,
+          payer: options.payer.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+        signers: [],
+        remainingAccounts: [],
+      },
+    ),
+    options,
+    uuid,
+  }
 }
 
-;(async () => {
-  /* await handleConfigureCandyMachine(
-    new web3.PublicKey('53kf3BvG4yWWDjvzjc2v8hkbSAu5QtcnttMoqcsY49xA'),
-  ) */
-  const r = await handleInitialCandyMachine(
-    '53kf3BvG4yWWDjvzjc2v8hkbSAu5QtcnttMoqcsY49xA',
-  )
-  console.log(r)
-})().then(() => process.exit(0))
+  ; (async () => {
+    /* const { config, assets, options } = await createCandyMachineConfig()
+    const { results } = await handleConfigureCandyMachine(config, {
+      assets,
+      options,
+    })
+    const initialTx = await initialCandyMachine(config, {
+      NFTitemsAvailable: assets.jsonFiles.length,
+      options,
+    }) */
+    /* const initialTx = await initialCandyMachine('G5YP5uPChKB8E5syDJWJ5ffbb7zB3uhVuoeNRacW7kGm')
+    console.log(initialTx) */
+  })().then(() => process.exit(0))

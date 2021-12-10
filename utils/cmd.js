@@ -1,9 +1,7 @@
 const prompts = require('prompts')
-const fs = require('fs')
-const path = require('path')
+
 
 const {
-  SOLANA_ACCOUNTS_DIR,
   CANDY_MACHINE_SAVE_DIR,
   DEFAULT_BATCH_GET_CANDY_MACHINE_FILE,
   DEFAULT_BATCH_MINT_DIR,
@@ -12,7 +10,7 @@ const {
 
 const solana = require('./solana')
 const scrap = require('./scrap')
-const { listDir, readJsonToObject } = require('./common')
+const { listDir, readJsonToObject, parsePrice } = require('./common')
 
 const { Minter } = require('../objects')
 
@@ -21,27 +19,6 @@ const exitProcess = () => {
   process.exit(0)
 }
 
-/**
- * @param {boolean?} doneExitOnCancel
- * @returns {Promise<string>}
- **/
-const selectCluster = async (doneExitOnCancel) => {
-  const { cluster } = await prompts(
-    {
-      type: 'select',
-      name: 'cluster',
-      message: 'Select solana cluster type:',
-      choices: ['mainnet-beta', 'testnet', 'devnet'].map((v) => {
-        return { title: v, value: v }
-      }),
-      initial: 0,
-    },
-    {
-      onCancel: !doneExitOnCancel && exitProcess,
-    },
-  )
-  return cluster
-}
 
 /**
  * @param {boolean?} doneExitOnCancel
@@ -105,38 +82,15 @@ const inputMintCount = async (defaultCount, doneExitOnCancel) => {
   return count
 }
 
-/**
- * @param {boolean?} doneExitOnCancel
- * @returns {Promise<Uint8Array>}
- **/
-const selectPrivKey = async (doneExitOnCancel) => {
-  const { privKey } = await prompts(
-    {
-      type: 'select',
-      name: 'privKey',
-      message: 'Select an privKey file:',
-      choices: fs.readdirSync(SOLANA_ACCOUNTS_DIR).map((f) => {
-        return {
-          title: f,
-          value: solana.getPrivKey(path.join(SOLANA_ACCOUNTS_DIR, f)),
-        }
-      }),
-      initial: 0,
-    },
-    {
-      onCancel: !doneExitOnCancel && exitProcess,
-    },
-  )
-  return privKey
-}
+
 
 /**
  * @param {solana.ReuseableOptions?} options
  **/
 const cmdReuseInitializer = async (options) => {
   if (!options) {
-    const cluster = await selectCluster()
-    const privKey = await selectPrivKey()
+    const cluster = await solana.selectCluster()
+    const privKey = await solana.selectPrivKey()
     options = { cluster, privKey }
   }
   return await solana.reuseInitializer(options)
@@ -213,14 +167,12 @@ const handleCliGetCandyMachine = async (options) => {
   )
   scarpResults?.constructor === Array &&
     console.log(
-      `🌈 Scrap: Get ${scarpResults.length} results, Success: ${
-        scarpResults.filter((v) => v.success).length
+      `🌈 Scrap: Get ${scarpResults.length} results, Success: ${scarpResults.filter((v) => v.success).length
       }, Error: ${scarpResults.filter((v) => !v.success).length}!`,
     )
   mintResults?.constructor === Array &&
     console.log(
-      `🌈 Mint: Get ${mintResults.length} results, Success: ${
-        mintResults.filter((v) => v.success).length
+      `🌈 Mint: Get ${mintResults.length} results, Success: ${mintResults.filter((v) => v.success).length
       }, Error: ${mintResults.filter((v) => !v.success).length}!`,
       results,
     )
@@ -317,8 +269,7 @@ const handleCliMintingNFT = async (options) => {
   )
   const results = await mintingHandles[handle](options)
   console.log(
-    `🌈 Mint: Get ${results.length} results, Success: ${
-      results.filter((v) => v.success).length
+    `🌈 Mint: Get ${results.length} results, Success: ${results.filter((v) => v.success).length
     }, Error: ${results.filter((v) => !v.success).length}!`,
     results,
   )
@@ -340,7 +291,7 @@ const cliMintingNFT = async (candyMachineKeys, options) => {
         )
         const result = await minter.mint(
           candyMachineKeys.MINT_COUNT ||
-            (await inputMintCount(DEFAULT_NFT_MINT_COUNT)),
+          (await inputMintCount(DEFAULT_NFT_MINT_COUNT)),
         )
         return { minter, result }
       }),
@@ -373,24 +324,46 @@ const handleCli = async () => {
 
 /**
  * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<number>}
  **/
 const inputSolanaPrice = async (doneExitOnCancel) => {
   const { price } = await prompts(
     {
       type: 'number',
       name: 'price',
-      message: 'Please enter NFT mint price:',
+      message: 'Please enter NFT mint price (sol):',
       initial: 1,
+      float: true,
+      round: 9
     },
     {
       onCancel: !doneExitOnCancel && exitProcess,
     },
   )
-  return solana.parsePrice(price)
+  return parsePrice(price, solana.LAMPORTS_PER_SOL)
 }
 
 /**
  * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<string>}
+ **/
+const inputNFTsAssetsDir = async (doneExitOnCancel) => {
+  const { assetsPath } = await prompts(
+    {
+      type: 'text',
+      name: 'assetsPath',
+      message: 'Please enter NFT assets path:',
+    },
+    {
+      onCancel: !doneExitOnCancel && exitProcess,
+    },
+  )
+  return assetsPath
+}
+
+/**
+ * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<number>}
  **/
 const inputNFTsAvailable = async (doneExitOnCancel) => {
   const { count } = await prompts(
@@ -411,11 +384,10 @@ const inputNFTsAvailable = async (doneExitOnCancel) => {
 module.exports = {
   exitProcess,
   inputUrl,
-  selectCluster,
-  selectPrivKey,
   handleCliGetCandyMachine,
   handleCliMintingNFT,
   handleCli,
   inputSolanaPrice,
   inputNFTsAvailable,
+  inputNFTsAssetsDir,
 }
