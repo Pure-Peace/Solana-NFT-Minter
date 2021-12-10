@@ -5,5 +5,5 @@
     "mintUrl": "The mint site url",
     "walletPrivKey": "./solana-accounts/1.json",
     "mintCount": -1,
-    "saveData": "./"
+    "logsDir": "./"
 }
