@@ -44,6 +44,13 @@ const readJsonToObject = (path) => {
 }
 
 /**
+ * @param {any} obj
+ **/
+const saveJsonFromObject = (obj) => {
+  return fs.writeSync(JSON.stringify(obj))
+}
+
+/**
  * @param {string} fmt
  * @param {Date} date
  **/
@@ -82,6 +89,7 @@ module.exports = {
   rmDir,
   urlToDir,
   readJsonToObject,
+  saveJsonFromObject,
   parsePrice,
   dateFormat,
 }

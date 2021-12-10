@@ -6,9 +6,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { readJsonToObject } = require('./common')
-const {
-  SOLANA_ACCOUNTS_DIR
-} = require('../nft-minter-config.json')
+const { SOLANA_ACCOUNTS_DIR } = require('../nft-minter-config.json')
 
 /**
  * @typedef  {{
@@ -373,7 +371,6 @@ const mintOne = async (readyData) => {
     ],
   })
 
-  console.log('>>> MINT TX: ', tx)
   return tx
 }
 
@@ -413,7 +410,9 @@ const selectPrivKey = async (doneExitOnCancel) => {
       choices: fs.readdirSync(SOLANA_ACCOUNTS_DIR).map((f) => {
         return {
           title: f,
-          value: new Uint8Array(readJsonToObject(path.join(SOLANA_ACCOUNTS_DIR, f))),
+          value: new Uint8Array(
+            readJsonToObject(path.join(SOLANA_ACCOUNTS_DIR, f)),
+          ),
         }
       }),
       initial: 0,
@@ -447,7 +446,6 @@ const selectCluster = async (doneExitOnCancel) => {
   return cluster
 }
 
-
 /**
  * @param {ReuseableOptions} options
  **/
@@ -478,7 +476,15 @@ const reuseInitializer = async (options = {}) => {
       provider = providerData.provider
     }
     anchorProgram = await createCandyAnchorProgram(provider)
-    return { anchorProgram, payer, wallet, provider, privKey, connection, cluster }
+    return {
+      anchorProgram,
+      payer,
+      wallet,
+      provider,
+      privKey,
+      connection,
+      cluster,
+    }
   } else {
     return options
   }
@@ -599,7 +605,6 @@ const createCandyConfig = async function (
 const explorerUrl = (address, cluster) => {
   return `https://explorer.solana.com/address/${address}?cluster=${cluster}`
 }
-
 
 module.exports = {
   CANDY_MACHINE,
