@@ -1,4 +1,4 @@
-const { cmd } = require('./utils')
+const cmd = require('../utils/cmd')
 
 ;(async () => {
   await cmd.handleCli()

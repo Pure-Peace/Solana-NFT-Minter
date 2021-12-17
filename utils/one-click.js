@@ -3,9 +3,10 @@ const {
   dateFormat,
   saveJsonFromObject,
   sleep,
-} = require('./utils/common')
-const scrap = require('./utils/scrap')
-const solana = require('./utils/solana')
+} = require('./common')
+const scrap = require('./scrap')
+const solana = require('./solana')
+const prompts = require('prompts')
 
 const path = require('path')
 const fs = require('fs')
@@ -28,8 +29,6 @@ const fs = require('fs')
 var RC = 0
 /** @type {OneClickMintConfigSchema} **/
 var config
-/** @type {string} **/
-var configPath
 /** @type {{ info: Logger, err: Logger, tx: Logger }} **/
 var log = {}
 /** @type {string || undefined} **/
@@ -45,8 +44,7 @@ var _balanceCheck
 /** @type {boolean} **/
 var endFlag = false
 
-function parseConfig() {
-  configPath = path.join(process.argv[2])
+function parseConfig(configPath) {
   /** @type {OneClickMintConfigSchema} **/
   config = readJsonToObject(configPath)
   return { config, configPath }
@@ -119,10 +117,8 @@ function check() {
   }
 
   log.info(
-    `Config Loaded! Task: "${config.name}"; Cluster: "${
-      config.cluster
-    }"; MintCount: "${
-      config.mintCount === -1 ? 'Unlimited' : config.mintCount
+    `Config Loaded! Task: "${config.name}"; Cluster: "${config.cluster
+    }"; MintCount: "${config.mintCount === -1 ? 'Unlimited' : config.mintCount
     }"; Candy Machine: "${config.candyMachine}"`,
   )
 }
@@ -252,21 +248,32 @@ async function minting(candyData, readyData) {
   log.info('Done!==')
 }
 
-async function main() {
-  parseConfig()
-  initLoggers()
-  check()
+async function main(withCmd) {
+  try {
+    parseConfig(withCmd ? (await prompts(
+      {
+        type: 'text',
+        name: 'value',
+        message: 'Please input Minting config file path:',
+      },
+      {
+        onCancel: () => process.exit(1),
+      },
+    )).value : path.join(process.argv[2]))
+    initLoggers()
+    check()
 
-  const readyData = await ready()
-  const candyData = await readyCandyData(readyData.anchorProgram)
-  await minting(candyData, readyData)
-}
-
-main()
-  .then(() => {
+    const readyData = await ready()
+    const candyData = await readyCandyData(readyData.anchorProgram)
+    await minting(candyData, readyData)
     stopProcess(0)
-  })
-  .catch((err) => {
+  } catch (err) {
     console.error(err)
     stopProcess(1)
-  })
+  }
+}
+
+
+module.exports = {
+  main
+}

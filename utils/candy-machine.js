@@ -1,9 +1,8 @@
-const solana = require('./utils/solana')
-const cmd = require('./utils/cmd')
-const common = require('./utils/common')
+const solana = require('./solana')
+const prompts = require('prompts')
+const common = require('./common')
 const web3 = require('@solana/web3.js')
 const anchor = require('@project-serum/anchor')
-const config = require('website-scraper/lib/config/defaults')
 
 const META_DATA_MUTABLE = true
 const RETAIN_AUTHORITY = true
@@ -53,12 +52,38 @@ const createCandyMachineConfig = async ({
   return { uuid, config, txId, assets, options }
 }
 
+
+/**
+ * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<string>}
+ **/
+const inputNFTsAssetsDir = async (doneExitOnCancel) => {
+  const { assetsPath } = await prompts(
+    {
+      type: 'text',
+      name: 'assetsPath',
+      message: 'Please enter NFT assets path (Example: include "1.json", "1.png", "2.json", "2.png"...):',
+    },
+    {
+      onCancel: !doneExitOnCancel && exitProcess,
+    },
+  )
+  return assetsPath
+}
+
+const exitProcess = () => {
+  console.log('\n🏳️‍🌈 Program ended')
+  process.exit(0)
+}
+
+
+
 /**
  * @param {string} assetsDir
  * @returns {Promise<NFTsAssets>}
  **/
 const getNFTsAssetsFromDir = async (assetsDir) => {
-  if (!assetsDir) assetsDir = await cmd.inputNFTsAssetsDir()
+  if (!assetsDir) assetsDir = await inputNFTsAssetsDir()
   const [jsonFiles, pngFiles] = ['.json', '.png'].map((i) =>
     common.listDir(assetsDir).files.filter((f) => f.endsWith(i)),
   )
@@ -79,7 +104,6 @@ const readyHandleCandyMachine = async (cluster, privKey) => {
   return { anchorProgram, payer }
 }
 
-
 /**
  * @param {CandyMachineConfig} candyMachineConfig
  **/
@@ -94,7 +118,7 @@ const parseCandyMachineConfig = (candyMachineConfig) => {
  **/
 const addCandiesToCandyMachine = async (
   candyMachineConfig,
-  { assets, assetsDir, options } = {},
+  { assets, assetsDir, baseUrl, options, } = {},
 ) => {
   if (!assets) assets = await getNFTsAssetsFromDir(assetsDir)
   options = await solana.reuseInitializer(options)
@@ -111,7 +135,7 @@ const addCandiesToCandyMachine = async (
           jsonFiles.splice(0, 10).map((jsonFile, idx) => {
             const { name } = common.readJsonToObject(jsonFile)
             return {
-              uri: `https://osu.icu/nft/${ind + idx}.json`,
+              uri: baseUrl.replace('$id', ind + idx),
               name,
             }
           }),
@@ -133,20 +157,83 @@ const addCandiesToCandyMachine = async (
 }
 
 /**
+ * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<string>}
+ **/
+const inputBaseUrl = async (doneExitOnCancel) => {
+  const { baseUrl } = await prompts(
+    {
+      type: 'text',
+      name: 'baseUrl',
+      message: 'Please input baseUrl of NFT items (Example: "https://api/$id.json". $id will be replaced with NFT id):',
+      initial: 1,
+      min: 0,
+    },
+    {
+      onCancel: !doneExitOnCancel && exitProcess,
+    },
+  )
+  return baseUrl
+}
+
+
+/**
  * @param {CandyMachineConfig} candyMachineConfig
  * @param {{ assets?: NFTsAssets, assetsDir?: string, options?: solana.ReuseableOptions }}
  **/
 const handleConfigureCandyMachine = async (
   candyMachineConfig,
-  { assets, assetsDir, options } = {},
+  { assets, assetsDir, baseUrl, options } = {},
 ) => {
+  if (!baseUrl) baseUrl = await inputBaseUrl()
   if (!assets) assets = await getNFTsAssetsFromDir(assetsDir)
   options = await solana.reuseInitializer(options)
   const results = await addCandiesToCandyMachine(
     new web3.PublicKey(candyMachineConfig),
-    { assets, options },
+    { assets, baseUrl, options },
   )
   return { results, options }
+}
+
+/**
+ * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<number>}
+ **/
+const inputSolanaPrice = async (doneExitOnCancel) => {
+  const { price } = await prompts(
+    {
+      type: 'number',
+      name: 'price',
+      message: 'Please enter NFT mint price (sol):',
+      initial: 1,
+      float: true,
+      round: 9
+    },
+    {
+      onCancel: !doneExitOnCancel && exitProcess,
+    },
+  )
+  return parsePrice(price, solana.LAMPORTS_PER_SOL)
+}
+
+/**
+ * @param {boolean?} doneExitOnCancel
+ * @returns {Promise<number>}
+ **/
+const inputNFTsAvailable = async (doneExitOnCancel) => {
+  const { count } = await prompts(
+    {
+      type: 'number',
+      name: 'count',
+      message: 'Please enter count of NFT items available:',
+      initial: 1,
+      min: 0,
+    },
+    {
+      onCancel: !doneExitOnCancel && exitProcess,
+    },
+  )
+  return count
 }
 
 
@@ -170,9 +257,9 @@ const initialCandyMachine = async (
       bump,
       {
         uuid,
-        price: new anchor.BN(parsedPrice || (await cmd.inputSolanaPrice())),
+        price: new anchor.BN(parsedPrice || (await inputSolanaPrice())),
         itemsAvailable: new anchor.BN(
-          NFTitemsAvailable || (await cmd.inputNFTsAvailable()),
+          NFTitemsAvailable || (await inputNFTsAvailable()),
         ),
         goLiveDate: null,
       },
@@ -195,16 +282,11 @@ const initialCandyMachine = async (
   }
 }
 
-  ; (async () => {
-    const { config, assets, options } = await createCandyMachineConfig()
-    const { results } = await handleConfigureCandyMachine(config, {
-      assets,
-      options,
-    })
-    const initialTx = await initialCandyMachine(config, {
-      NFTitemsAvailable: assets.jsonFiles.length,
-      options,
-    })
-    /* const initialTx = await initialCandyMachine('G5YP5uPChKB8E5syDJWJ5ffbb7zB3uhVuoeNRacW7kGm')
-    console.log(initialTx) */
-  })().then(() => process.exit(0))
+module.exports = {
+  initialCandyMachine,
+  handleConfigureCandyMachine,
+  addCandiesToCandyMachine,
+  parseCandyMachineConfig,
+  createCandyMachineConfig,
+  readyHandleCandyMachine
+}

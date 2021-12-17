@@ -4,6 +4,7 @@ const anchor = require('@project-serum/anchor')
 const prompts = require('prompts')
 const fs = require('fs')
 const path = require('path')
+const base58 = require('bs58')
 
 const { readJsonToObject } = require('./common')
 const { SOLANA_ACCOUNTS_DIR } = require('../nft-minter-config.json')
@@ -490,6 +491,14 @@ const reuseInitializer = async (options = {}) => {
   }
 }
 
+const checkBase58 = (key) => {
+  try {
+    return web3.PublicKey.isOnCurve(base58.decode(key))
+  } catch (_err) {
+    return false
+  }
+}
+
 /**
  * @param {Array<string>} likeKeys
  * @param {ReuseableOptions} options
@@ -499,7 +508,7 @@ const tryGetRealCandyKeys = async (likeKeys, options) => {
   const newOptions = await reuseInitializer(options)
   return {
     tryCandyData: await Promise.any(
-      likeKeys.map((k) => tryCandyKey(newOptions.anchorProgram, k)),
+      likeKeys.filter(checkBase58).map((k) => tryCandyKey(newOptions.anchorProgram, k)),
     ),
     ...Object.assign(options, newOptions),
   }

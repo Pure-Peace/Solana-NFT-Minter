@@ -10,6 +10,8 @@ const {
 
 const solana = require('./solana')
 const scrap = require('./scrap')
+const oneClickMint = require('./one-click')
+const NFTCandyMachine = require('./candy-machine')
 const { listDir, readJsonToObject, parsePrice } = require('./common')
 
 const { Minter } = require('../objects')
@@ -303,7 +305,7 @@ const cliMintingNFT = async (candyMachineKeys, options) => {
 
 const handleCli = async () => {
   console.log('\nWelcome to Solana-NFT-Minter!\n')
-  const cliHandles = [handleCliGetCandyMachine, handleCliMintingNFT]
+  const cliHandles = [handleCliGetCandyMachine, handleCliMintingNFT, handleOneClickMinting, handleCreateCandyMachine]
   const { handle } = await prompts(
     {
       type: 'select',
@@ -312,6 +314,8 @@ const handleCli = async () => {
       choices: [
         '1. Get Candy machine from NFT mint site',
         '2. Minting NFT with Candy machine config',
+        '3. One-Click-Mint with mint config',
+        '4. Create your own NFT CandyMachine',
       ],
       initial: 0,
     },
@@ -322,72 +326,35 @@ const handleCli = async () => {
   return await cliHandles[handle]()
 }
 
-/**
- * @param {boolean?} doneExitOnCancel
- * @returns {Promise<number>}
- **/
-const inputSolanaPrice = async (doneExitOnCancel) => {
-  const { price } = await prompts(
-    {
-      type: 'number',
-      name: 'price',
-      message: 'Please enter NFT mint price (sol):',
-      initial: 1,
-      float: true,
-      round: 9
-    },
-    {
-      onCancel: !doneExitOnCancel && exitProcess,
-    },
-  )
-  return parsePrice(price, solana.LAMPORTS_PER_SOL)
+const handleCreateCandyMachine = async () => {
+  const { config, assets, options } = await NFTCandyMachine.createCandyMachineConfig()
+  const { results } = await NFTCandyMachine.handleConfigureCandyMachine(config, {
+    assets,
+    baseUrl,
+    options,
+  })
+  const initialTx = await NFTCandyMachine.initialCandyMachine(config, {
+    NFTitemsAvailable: assets.jsonFiles.length,
+    options,
+  })
+  console.log('Initial TX: ', initialTx)
+  return { config, assets, options, results, initialTx }
 }
 
-/**
- * @param {boolean?} doneExitOnCancel
- * @returns {Promise<string>}
- **/
-const inputNFTsAssetsDir = async (doneExitOnCancel) => {
-  const { assetsPath } = await prompts(
-    {
-      type: 'text',
-      name: 'assetsPath',
-      message: 'Please enter NFT assets path:',
-    },
-    {
-      onCancel: !doneExitOnCancel && exitProcess,
-    },
-  )
-  return assetsPath
+
+const handleOneClickMinting = async () => {
+  return await oneClickMint.main(true)
 }
 
-/**
- * @param {boolean?} doneExitOnCancel
- * @returns {Promise<number>}
- **/
-const inputNFTsAvailable = async (doneExitOnCancel) => {
-  const { count } = await prompts(
-    {
-      type: 'number',
-      name: 'count',
-      message: 'Please enter count of NFT items available:',
-      initial: 1,
-      min: 0,
-    },
-    {
-      onCancel: !doneExitOnCancel && exitProcess,
-    },
-  )
-  return count
-}
+
+
+
+
 
 module.exports = {
   exitProcess,
   inputUrl,
   handleCliGetCandyMachine,
   handleCliMintingNFT,
-  handleCli,
-  inputSolanaPrice,
-  inputNFTsAvailable,
-  inputNFTsAssetsDir,
+  handleCli
 }

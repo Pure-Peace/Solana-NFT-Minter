@@ -12,7 +12,7 @@ const {
   EXCLUDES,
 } = require('../nft-minter-config.json')
 
-const CANDY_REGEX = /(?<=")([A-Za-z0-9]{40,50})?(?=")/g
+const CANDY_REGEX = /(?<=")([1-9A-HJ-NP-Za-km-z]{32,44})?(?=")/g
 
 /**
  * @param {string} url
@@ -83,8 +83,7 @@ const scrapCandy = async (url, options) => {
     console.log('\n ⚽ Getting CandyMachine:')
     const data = await getCandyFromSite(url, options)
     console.log(
-      `\n✔️ Candy machine has been obtained!\n\n >> 📜 Mint site: ${url}\n >> 🎁 Candy machine: ${
-        data.tryCandyData.key
+      `\n✔️ Candy machine has been obtained!\n\n >> 📜 Mint site: ${url}\n >> 🎁 Candy machine: ${data.tryCandyData.key
       }\n >> ✨ View on Explorer: ${solana.explorerUrl(
         data.tryCandyData.key,
         options.cluster,
@@ -112,6 +111,7 @@ const scrapCandyAndSave = async (url, options) => {
 
   const fullPath = path.join(CANDY_MACHINE_SAVE_DIR, file)
   data.candyConfig = {
+    URL: url,
     CANDY_MACHINE_PROGRAM_UUID: data.tryCandyData.key.slice(0, 6),
     CANDY_MACHINE_PROGRAM_CONFIG: data.tryCandyData.key,
     CONNECTION_NETWORK: options.cluster,
