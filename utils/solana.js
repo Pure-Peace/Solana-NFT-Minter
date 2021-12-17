@@ -403,26 +403,23 @@ const tryCandyKey = (anchorProgram, key) => {
  * @returns {Promise<Uint8Array>}
  **/
 const selectPrivKey = async (doneExitOnCancel) => {
-  const { privKey } = await prompts(
+  const files = fs.readdirSync(SOLANA_ACCOUNTS_DIR)
+  const { i } = await prompts(
     {
       type: 'select',
-      name: 'privKey',
+      name: 'i',
       message: 'Select an privKey file:',
-      choices: fs.readdirSync(SOLANA_ACCOUNTS_DIR).map((f) => {
-        return {
-          title: f,
-          value: new Uint8Array(
-            readJsonToObject(path.join(SOLANA_ACCOUNTS_DIR, f)),
-          ),
-        }
-      }),
+      choices: files,
       initial: 0,
     },
     {
       onCancel: !doneExitOnCancel && (() => process.exit(0)),
     },
   )
-  return privKey
+
+  return new Uint8Array(
+    readJsonToObject(path.join(SOLANA_ACCOUNTS_DIR, files[i])),
+  )
 }
 
 /**
