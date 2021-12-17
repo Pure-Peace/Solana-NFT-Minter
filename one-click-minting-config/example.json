@@ -1,9 +1,9 @@
 {
     "name": "MY-NFT-PROJECT",
-    "cluster": "devnet", // devnet or mainnet-beta
+    "cluster": "devnet", 
     "candyMachine": "G5YP5uPChKB8E5syDJWJ5ffbb7zB3uhVuoeNRacW7kGm",
     "mintUrl": "",
-    "walletPrivKey": "./data/solana-accounts/1.json", // privkey file
+    "walletPrivKey": "./data/solana-accounts/1.json",
     "mintCount": 1,
     "logsDir": "./"
 }
